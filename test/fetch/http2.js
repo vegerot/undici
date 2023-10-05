@@ -66,6 +66,61 @@ test('[Fetch] Simple GET with h2', async t => {
 })
 
 test('[Fetch] Should handle h2 request with body (string or buffer)', async t => {
+  const expectedBody = 'hello from client!'
+  const expectedRequestBody = 'hello h2!'
+  const requestBody = []
+
+  const server = createSecureServer(pem, (req, res)=>{
+    let body = ''
+
+    req.on('data', chunk => {
+      body += chunk
+    })
+    req.on('end', () => {
+      res.end(body)
+    })
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'x-custom-h2': req.headers.get('x-my-header' ),
+    })
+
+  })
+
+  t.plan(2)
+
+  server.listen()
+  await once(server, 'listening')
+
+  const client = new Client(`https://localhost:${server.address().port}`, {
+    connect: {
+      rejectUnauthorized: false
+    },
+    allowH2: true
+  })
+
+  const response = await fetch(
+    `https://localhost:${server.address().port}/`,
+    // Needs to be passed to disable the reject unauthorized
+    {
+      method: 'POST',
+      dispatcher: client,
+      headers: {
+        'x-my-header': 'foo',
+        'content-type': 'text-plain'
+      },
+      body: expectedBody
+    }
+  )
+
+  const responseBody = await response.text()
+
+  t.teardown(server.close.bind(server))
+  t.teardown(client.close.bind(client))
+
+  t.equal(Buffer.concat(requestBody).toString('utf-8'), expectedBody)
+  t.equal(responseBody, expectedRequestBody)
+})
+test('[Fetch] Should handle h2 request with body (string or buffer)', async t => {
   const server = createSecureServer(pem)
   const expectedBody = 'hello from client!'
   const expectedRequestBody = 'hello h2!'
